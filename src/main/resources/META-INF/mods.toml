@@ -1,0 +1,13 @@
+modLoader="javafml"
+loaderVersion="[36,)"
+license="MIT"
+
+[[mods]]
+    modId="bettercauldron"
+    version="${file.jarVersion}"
+    displayName="Better Cauldron"
+    #updateJSONURL="https://change.me.example.invalid/updates.json"
+    displayURL="https://wouink.github.io"
+    logoFile="bettercauldron.png"
+    authors="Wink"
+    description="Put any fluid in a Cauldron! Also includes Cauldron recipes."
