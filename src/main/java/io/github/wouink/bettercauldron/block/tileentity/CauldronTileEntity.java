@@ -1,12 +1,14 @@
 package io.github.wouink.bettercauldron.block.tileentity;
 
 import io.github.wouink.bettercauldron.BetterCauldron;
+import io.github.wouink.bettercauldron.recipe.CauldronRecipe;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.ShulkerBoxBlock;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.item.ItemEntity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.entity.player.ServerPlayerEntity;
 import net.minecraft.fluid.Fluid;
 import net.minecraft.fluid.Fluids;
 import net.minecraft.item.*;
@@ -81,7 +83,6 @@ public class CauldronTileEntity extends TileEntity {
 	}
 
 	// replicates and improves the vanilla cauldron behavior
-	// cleaning actions are hardcoded in vanilla... maybe I'll move them to a recipe
 	public void handleUse(PlayerEntity playerEntity, Hand hand) {
 		ItemStack stack = playerEntity.getItemInHand(hand);
 		if(stack.getItem() instanceof BucketItem) {
@@ -130,13 +131,28 @@ public class CauldronTileEntity extends TileEntity {
 				level.playSound(playerEntity, worldPosition, SoundEvents.BOTTLE_FILL, SoundCategory.PLAYERS, 1.0f, 1.0f);
 				playerEntity.awardStat(Stats.USE_CAULDRON);
 			}
-		} else if(stack.getItem() instanceof IDyeableArmorItem && fluid == Fluids.WATER && fluidLevel > 0) {
+		} else if(!handleHardcodedActions(stack, playerEntity, hand)) {
+			ItemStack[] recipeResults = useRecipe(stack);
+			if(recipeResults != null) {
+				playerEntity.setItemInHand(hand, recipeResults[0]);
+				if(playerEntity instanceof ServerPlayerEntity) ((ServerPlayerEntity) playerEntity).refreshContainer(playerEntity.inventoryMenu);
+				for(int i = 1; i < recipeResults.length; i++) {
+					System.out.println(i);
+					if(!playerEntity.addItem(recipeResults[i])) playerEntity.drop(recipeResults[i], false);
+				}
+			}
+		}
+	}
+
+	public boolean handleHardcodedActions(ItemStack stack, PlayerEntity playerEntity, Hand hand) {
+		if(stack.getItem() instanceof IDyeableArmorItem && fluid == Fluids.WATER && fluidLevel > 0) {
 			IDyeableArmorItem armorItem = (IDyeableArmorItem) stack.getItem();
 			if(armorItem.hasCustomColor(stack)) {
 				armorItem.clearColor(stack);
 				if(!playerEntity.abilities.instabuild) decrementLevel();
 				playerEntity.awardStat(Stats.CLEAN_ARMOR);
 				playerEntity.setItemInHand(hand, stack);
+				return true;
 			}
 		} else if(stack.getItem() instanceof BannerItem && fluid == Fluids.WATER && fluidLevel > 0) {
 			ItemStack newBanner = stack.copy();
@@ -148,23 +164,28 @@ public class CauldronTileEntity extends TileEntity {
 			}
 			if(stack.isEmpty()) playerEntity.setItemInHand(hand, newBanner);
 			else if(!playerEntity.addItem(newBanner)) playerEntity.drop(newBanner, false);
+			return true;
 		} else if(stack.getItem() instanceof BlockItem && ((BlockItem) stack.getItem()).getBlock() instanceof ShulkerBoxBlock && ((BlockItem) stack.getItem()).getBlock() != Blocks.SHULKER_BOX && fluid == Fluids.WATER && fluidLevel > 0) {
 			ItemStack newShulkerBox = new ItemStack(Blocks.SHULKER_BOX);
 			if(stack.hasTag()) newShulkerBox.setTag(stack.getTag().copy());
 			playerEntity.setItemInHand(hand, newShulkerBox);
 			if(!playerEntity.abilities.instabuild) decrementLevel();
 			playerEntity.awardStat(Stats.CLEAN_SHULKER_BOX);
+			return true;
 		}
-		else {
-			playerEntity.setItemInHand(hand, useRecipe(stack));
-		}
+		return false;
 	}
 
 	public void entityInside(Entity entity) {
 		if(entity instanceof ItemEntity) {
 			ItemStack stack = ((ItemEntity) entity).getItem();
-			ItemStack result = soakRecipe(stack);
-			if(!stack.sameItem(result)) ((ItemEntity) entity).setItem(result);
+			ItemStack[] results = useRecipe(stack);
+			if(results != null) {
+				((ItemEntity) entity).setItem(results[0]);
+				for(int i = 1; i < results.length; i++) {
+					level.addFreshEntity(new ItemEntity(level, worldPosition.getX() + .5, worldPosition.getY() + .5, worldPosition.getZ() + .5, results[i]));
+				}
+			}
 		} else if(this.fluid == Fluids.WATER) {
 			if(entity.isOnFire() && !entity.fireImmune()) {
 				entity.clearFire();
@@ -178,15 +199,19 @@ public class CauldronTileEntity extends TileEntity {
 		if(fluid == Fluids.WATER) incrementLevel();
 	}
 
-	public ItemStack soakRecipe(ItemStack dropped) {
-		// just an example recipe for now
-		// will be a real recipe type in the future
-		if(dropped.getItem() == Items.DIRT) return new ItemStack(Items.DIAMOND, dropped.getCount());
-		return dropped;
-	}
-
-	public ItemStack useRecipe(ItemStack used) {
-		return used;
+	public ItemStack[] useRecipe(ItemStack ingredient) {
+		CauldronRecipe recipe = CauldronRecipe.findRecipe(ingredient, fluid.getRegistryName(), fluidLevel);
+		if(recipe != null) {
+			fluidLevel -= recipe.getConsumedLevel();
+			if(fluidLevel <= 0) {
+				fluid = Fluids.EMPTY;
+				fluidLevel = 0;
+			}
+			ItemStack[] results = recipe.getResults();
+			for(ItemStack stack : results) stack.setCount(ingredient.getCount());
+			return results;
+		}
+		return null;
 	}
 
 	// sync between client/server

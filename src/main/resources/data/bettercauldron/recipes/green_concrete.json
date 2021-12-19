@@ -1,0 +1,10 @@
+{
+  "type": "bettercauldron:make_in_cauldron",
+  "input": {
+    "item": "minecraft:green_concrete_powder"
+  },
+  "result": "minecraft:green_concrete",
+  "fluid": "minecraft:water",
+  "requires_level": 1,
+  "consumes_level": 1
+}

@@ -1,0 +1,10 @@
+{
+  "type": "bettercauldron:make_in_cauldron",
+  "input": {
+    "item": "minecraft:sticky_piston"
+  },
+  "result": ["minecraft:piston", "minecraft:slime_ball"],
+  "fluid": "minecraft:water",
+  "requires_level": 1,
+  "consumes_level": 1
+}

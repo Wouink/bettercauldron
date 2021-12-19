@@ -1,0 +1,10 @@
+{
+  "type": "bettercauldron:make_in_cauldron",
+  "input": {
+    "tag": "bettercauldron:dyed_beds"
+  },
+  "result": "minecraft:white_bed",
+  "fluid": "minecraft:water",
+  "requires_level": 1,
+  "consumes_level": 1
+}

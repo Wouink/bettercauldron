@@ -4,7 +4,10 @@ import io.github.wouink.bettercauldron.block.Cauldron;
 import io.github.wouink.bettercauldron.block.tileentity.CauldronTileEntity;
 import io.github.wouink.bettercauldron.client.CauldronRenderer;
 import io.github.wouink.bettercauldron.event.CauldronPlaceEvent;
+import io.github.wouink.bettercauldron.recipe.CauldronRecipe;
 import net.minecraft.block.Block;
+import net.minecraft.item.crafting.IRecipeSerializer;
+import net.minecraft.item.crafting.IRecipeType;
 import net.minecraft.tileentity.TileEntityType;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegistryEvent;
@@ -32,6 +35,7 @@ public class BetterCauldron {
 	public BetterCauldron() {
 		IEventBus bus = FMLJavaModLoadingContext.get().getModEventBus();
 		RegistryEvents.Tile_Entities.register(bus);
+		RegistryEvents.Serializers.register(bus);
 		bus.addListener(this::setup);
 		bus.addListener(this::clientSetup);
 	}
@@ -50,6 +54,10 @@ public class BetterCauldron {
 	public static class RegistryEvents {
 		public static final DeferredRegister<TileEntityType<?>> Tile_Entities = DeferredRegister.create(ForgeRegistries.TILE_ENTITIES, MODID);
 		public static final RegistryObject<TileEntityType<CauldronTileEntity>> Cauldron_TileEntity = Tile_Entities.register("cauldron", () -> TileEntityType.Builder.of(CauldronTileEntity::new, Cauldron_Block).build(null));
+
+		public static final IRecipeType<CauldronRecipe> Cauldron_Recipe = IRecipeType.register(MODID + ":make_in_cauldron");
+		public static final DeferredRegister<IRecipeSerializer<?>> Serializers = DeferredRegister.create(ForgeRegistries.RECIPE_SERIALIZERS, MODID);
+		public static final RegistryObject<IRecipeSerializer<CauldronRecipe>> Cauldron_Recipe_Serializer = Serializers.register("make_in_cauldron", () -> new CauldronRecipe.Serializer());
 
 		@SubscribeEvent
 		public static void onBlockRegistry(final RegistryEvent.Register<Block> event) {
