@@ -1,0 +1,17 @@
+{
+  "type": "bettercauldron:make_in_cauldron",
+  "input": {
+    "item": "minecraft:glass_bottle"
+  },
+  "result": "minecraft:honey_bottle",
+  "fluid": "create:honey",
+  "requires_level": 1,
+  "consumes_level": 1,
+  "applies_to_stack": false,
+  "conditions": [
+    {
+      "type": "forge:mod_loaded",
+      "modid": "create"
+    }
+  ]
+}

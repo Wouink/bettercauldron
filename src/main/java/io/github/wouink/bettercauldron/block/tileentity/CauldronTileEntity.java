@@ -20,10 +20,7 @@ import net.minecraft.potion.Potions;
 import net.minecraft.stats.Stats;
 import net.minecraft.tileentity.BannerTileEntity;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.Hand;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.SoundCategory;
-import net.minecraft.util.SoundEvents;
+import net.minecraft.util.*;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import javax.annotation.Nullable;
@@ -82,6 +79,13 @@ public class CauldronTileEntity extends TileEntity {
 		return false;
 	}
 
+	private void updateFluid() {
+		if(fluidLevel <= 0) {
+			fluidLevel = 0;
+			fluid = Fluids.EMPTY;
+		}
+	}
+
 	// replicates and improves the vanilla cauldron behavior
 	public void handleUse(PlayerEntity playerEntity, Hand hand) {
 		ItemStack stack = playerEntity.getItemInHand(hand);
@@ -132,14 +136,27 @@ public class CauldronTileEntity extends TileEntity {
 				playerEntity.awardStat(Stats.USE_CAULDRON);
 			}
 		} else if(!handleHardcodedActions(stack, playerEntity, hand)) {
-			ItemStack[] recipeResults = useRecipe(stack);
-			if(recipeResults != null) {
-				playerEntity.setItemInHand(hand, recipeResults[0]);
-				if(playerEntity instanceof ServerPlayerEntity) ((ServerPlayerEntity) playerEntity).refreshContainer(playerEntity.inventoryMenu);
-				for(int i = 1; i < recipeResults.length; i++) {
-					System.out.println(i);
-					if(!playerEntity.addItem(recipeResults[i])) playerEntity.drop(recipeResults[i], false);
+			CauldronRecipe recipe = CauldronRecipe.findRecipe(stack, fluid.getRegistryName(), fluidLevel);
+			if(recipe != null) {
+				if(!playerEntity.abilities.instabuild) {
+					fluidLevel -= recipe.getConsumedLevel();
+					updateFluid();
 				}
+				if(!recipe.appliesToStack()) {
+					stack.setCount(stack.getCount() - 1);
+					playerEntity.setItemInHand(hand, stack);
+					for(ItemStack s : recipe.getResults()) {
+						s.setCount(1);
+						if(!playerEntity.addItem(s)) playerEntity.drop(s, false);
+					}
+				} else {
+					for(ItemStack s : recipe.getResults()) s.setCount(stack.getCount());
+					playerEntity.setItemInHand(hand, recipe.getResults()[0]);
+					for(int i = 1; i < recipe.getResults().length; i++) {
+						if(!playerEntity.addItem(recipe.getResults()[i])) playerEntity.drop(recipe.getResults()[i], false);
+					}
+				}
+				if(playerEntity instanceof ServerPlayerEntity) ((ServerPlayerEntity) playerEntity).refreshContainer(playerEntity.inventoryMenu);
 			}
 		}
 	}
@@ -176,42 +193,51 @@ public class CauldronTileEntity extends TileEntity {
 		return false;
 	}
 
+	private void spawnItemInside(ItemStack stack) {
+		level.addFreshEntity(new ItemEntity(level, worldPosition.getX() + .5, worldPosition.getY() + .5, worldPosition.getZ() + .5, stack));
+	}
+
 	public void entityInside(Entity entity) {
 		if(entity instanceof ItemEntity) {
-			ItemStack stack = ((ItemEntity) entity).getItem();
-			ItemStack[] results = useRecipe(stack);
-			if(results != null) {
-				((ItemEntity) entity).setItem(results[0]);
-				for(int i = 1; i < results.length; i++) {
-					level.addFreshEntity(new ItemEntity(level, worldPosition.getX() + .5, worldPosition.getY() + .5, worldPosition.getZ() + .5, results[i]));
+			ItemEntity item = ((ItemEntity) entity);
+			CauldronRecipe recipe = CauldronRecipe.findRecipe(item.getItem(), fluid.getRegistryName(), fluidLevel);
+			if(recipe != null) {
+				if(!recipe.appliesToStack()) {
+					int quantityCrafted = Math.min(item.getItem().getCount(), Math.floorDiv(fluidLevel, recipe.getConsumedLevel()));
+					if (quantityCrafted > 0) {
+						fluidLevel -= quantityCrafted * recipe.getConsumedLevel();
+						updateFluid();
+						ItemStack itemStack = item.getItem();
+						itemStack.setCount(itemStack.getCount() - quantityCrafted);
+						item.setItem(itemStack);
+						for(ItemStack s : recipe.getResults()) {
+							s.setCount(quantityCrafted);
+							spawnItemInside(s);
+						}
+					}
+				} else {
+					fluidLevel -= recipe.getConsumedLevel();
+					updateFluid();
+					int index = 0;
+					for(ItemStack s : recipe.getResults()) {
+						s.setCount(item.getItem().getCount());
+						if(index > 0) spawnItemInside(s);
+						index++;
+					}
+					item.setItem(recipe.getResults()[0]);
 				}
 			}
 		} else if(this.fluid == Fluids.WATER) {
 			if(entity.isOnFire() && !entity.fireImmune()) {
 				entity.clearFire();
 				this.fluidLevel--;
-				if (this.fluidLevel == 0) this.fluid = Fluids.EMPTY;
+				updateFluid();
 			}
 		}
 	}
 
 	public void fillFromRain() {
 		if(fluid == Fluids.WATER) incrementLevel();
-	}
-
-	public ItemStack[] useRecipe(ItemStack ingredient) {
-		CauldronRecipe recipe = CauldronRecipe.findRecipe(ingredient, fluid.getRegistryName(), fluidLevel);
-		if(recipe != null) {
-			fluidLevel -= recipe.getConsumedLevel();
-			if(fluidLevel <= 0) {
-				fluid = Fluids.EMPTY;
-				fluidLevel = 0;
-			}
-			ItemStack[] results = recipe.getResults();
-			for(ItemStack stack : results) stack.setCount(ingredient.getCount());
-			return results;
-		}
-		return null;
 	}
 
 	// sync between client/server

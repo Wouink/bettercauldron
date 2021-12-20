@@ -4,6 +4,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
 import io.github.wouink.bettercauldron.BetterCauldron;
+import net.minecraft.client.Minecraft;
 import net.minecraft.inventory.IInventory;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
@@ -14,6 +15,7 @@ import net.minecraft.util.NonNullList;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.world.World;
 import net.minecraftforge.common.crafting.CraftingHelper;
+import net.minecraftforge.fml.common.thread.EffectiveSide;
 import net.minecraftforge.fml.server.ServerLifecycleHooks;
 import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.registries.ForgeRegistryEntry;
@@ -27,19 +29,17 @@ public class CauldronRecipe implements IRecipe<IInventory> {
 	private final ResourceLocation fluid;
 	private final int requiresLevel;
 	private final int consumesLevel;
+	private final boolean appliesToStack;
 	private final ResourceLocation recipeLoc;
 
-	public CauldronRecipe(ResourceLocation loc, Ingredient ingredient, ItemStack[] results, ResourceLocation fluid, int requiresLevel, int consumesLevel) {
+	public CauldronRecipe(ResourceLocation loc, Ingredient ingredient, ItemStack[] results, ResourceLocation fluid, int requiresLevel, int consumesLevel, boolean appliesToStack) {
 		this.recipeLoc = loc;
 		this.ingredient = ingredient;
 		this.results = results;
 		this.fluid = fluid;
 		this.requiresLevel = requiresLevel;
 		this.consumesLevel = consumesLevel;
-	}
-
-	public int getRequiredLevel() {
-		return requiresLevel;
+		this.appliesToStack = appliesToStack;
 	}
 
 	public int getConsumedLevel() {
@@ -48,6 +48,10 @@ public class CauldronRecipe implements IRecipe<IInventory> {
 
 	public ItemStack[] getResults() {
 		return results;
+	}
+
+	public boolean appliesToStack() {
+		return appliesToStack;
 	}
 
 	public boolean matches(ItemStack stack, ResourceLocation fluid, int level) {
@@ -94,7 +98,9 @@ public class CauldronRecipe implements IRecipe<IInventory> {
 	}
 
 	public static CauldronRecipe findRecipe(ItemStack input, ResourceLocation fluid, int level) {
-		RecipeManager manager = ServerLifecycleHooks.getCurrentServer().getRecipeManager();
+		RecipeManager manager;
+		if(EffectiveSide.get().isClient()) manager = Minecraft.getInstance().player.connection.getRecipeManager();
+		else manager = ServerLifecycleHooks.getCurrentServer().getRecipeManager();
 		for(final CauldronRecipe recipe : manager.getAllRecipesFor(BetterCauldron.RegistryEvents.Cauldron_Recipe)) {
 			if(recipe.matches(input, fluid, level)) return recipe;
 		}
@@ -140,7 +146,8 @@ public class CauldronRecipe implements IRecipe<IInventory> {
 			ResourceLocation fluid = new ResourceLocation(JSONUtils.getAsString(json, "fluid", "bettercauldron:no_fluid"));
 			int requiredLevel = JSONUtils.getAsInt(json, "requires_level", 1);
 			int consumedLevel = JSONUtils.getAsInt(json, "consumes_level", requiredLevel);
-			return new CauldronRecipe(recipeId, input, outputs, fluid, requiredLevel, consumedLevel);
+			boolean appliesToStack = JSONUtils.getAsBoolean(json, "applies_to_stack", true);
+			return new CauldronRecipe(recipeId, input, outputs, fluid, requiredLevel, consumedLevel, appliesToStack);
 		}
 
 		@Nullable
@@ -151,7 +158,8 @@ public class CauldronRecipe implements IRecipe<IInventory> {
 			ResourceLocation fluid = packetBuffer.readResourceLocation();
 			int requiredLevel = packetBuffer.readInt();
 			int consumedLevel = packetBuffer.readInt();
-			return new CauldronRecipe(recipeId, input, outputs, fluid, requiredLevel, consumedLevel);
+			boolean appliesToStack = packetBuffer.readBoolean();
+			return new CauldronRecipe(recipeId, input, outputs, fluid, requiredLevel, consumedLevel, appliesToStack);
 		}
 
 		@Override
@@ -161,6 +169,7 @@ public class CauldronRecipe implements IRecipe<IInventory> {
 			packetBuffer.writeResourceLocation(recipe.fluid);
 			packetBuffer.writeInt(recipe.requiresLevel);
 			packetBuffer.writeInt(recipe.consumesLevel);
+			packetBuffer.writeBoolean(recipe.appliesToStack);
 		}
 	}
 }
