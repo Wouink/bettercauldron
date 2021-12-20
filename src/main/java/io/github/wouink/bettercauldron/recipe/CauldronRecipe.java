@@ -22,8 +22,6 @@ import javax.annotation.Nullable;
 import java.util.List;
 
 public class CauldronRecipe implements IRecipe<IInventory> {
-	public static final IRecipeSerializer<CauldronRecipe> SERIALIZER = new Serializer();
-
 	private final Ingredient ingredient;
 	private final ItemStack[] results;
 	private final ResourceLocation fluid;
@@ -58,12 +56,17 @@ public class CauldronRecipe implements IRecipe<IInventory> {
 
 	@Override
 	public IRecipeSerializer<?> getSerializer() {
-		return SERIALIZER;
+		return BetterCauldron.RegistryEvents.Cauldron_Recipe_Serializer.get();
 	}
 
 	@Override
 	public IRecipeType<?> getType() {
 		return BetterCauldron.RegistryEvents.Cauldron_Recipe;
+	}
+
+	@Override
+	public ResourceLocation getId() {
+		return this.recipeLoc;
 	}
 
 	@Override
@@ -90,12 +93,6 @@ public class CauldronRecipe implements IRecipe<IInventory> {
 		return ItemStack.EMPTY;
 	}
 
-	@Override
-	public ResourceLocation getId() {
-		// not used
-		return this.recipeLoc;
-	}
-
 	public static CauldronRecipe findRecipe(ItemStack input, ResourceLocation fluid, int level) {
 		RecipeManager manager = ServerLifecycleHooks.getCurrentServer().getRecipeManager();
 		for(final CauldronRecipe recipe : manager.getAllRecipesFor(BetterCauldron.RegistryEvents.Cauldron_Recipe)) {
@@ -107,8 +104,8 @@ public class CauldronRecipe implements IRecipe<IInventory> {
 	public static class Serializer extends ForgeRegistryEntry<IRecipeSerializer<?>> implements IRecipeSerializer<CauldronRecipe> {
 		public static ItemStack readItemStack(JsonElement json, boolean acceptsNBT) {
 			if(json.isJsonPrimitive() && json.getAsJsonPrimitive().isString()) {
-				final String identifier = json.getAsString();
-				final Item item = ForgeRegistries.ITEMS.getValue(new ResourceLocation(identifier));
+				String identifier = json.getAsString();
+				Item item = ForgeRegistries.ITEMS.getValue(new ResourceLocation(identifier));
 				if(item != null) return new ItemStack(item);
 				else throw new JsonSyntaxException(String.format("Could not find item with id %s", identifier));
 			} else if(json.isJsonObject()) return CraftingHelper.getItemStack(json.getAsJsonObject(), acceptsNBT);
@@ -116,45 +113,44 @@ public class CauldronRecipe implements IRecipe<IInventory> {
 		}
 
 		public static List<ItemStack> readItemStacks(JsonElement json, boolean acceptsNBT) {
-			final List<ItemStack> items = NonNullList.create();
+			List<ItemStack> items = NonNullList.create();
 			if(json.isJsonArray()) {
-				for(final JsonElement element : json.getAsJsonArray()) items.add(readItemStack(element, acceptsNBT));
+				for(JsonElement element : json.getAsJsonArray()) items.add(readItemStack(element, acceptsNBT));
 			} else items.add(readItemStack(json, acceptsNBT));
 			return items;
 		}
 
 		public static ItemStack[] readItemStackArray(PacketBuffer packetBuffer) {
-			final ItemStack[] items = new ItemStack[packetBuffer.readInt()];
+			ItemStack[] items = new ItemStack[packetBuffer.readInt()];
 			for(int i = 0; i < items.length; i++) items[i] = packetBuffer.readItem();
 			return items;
 		}
 
 		public static void writeItemStackArray(PacketBuffer packetBuffer, ItemStack[] items) {
 			packetBuffer.writeInt(items.length);
-			for(final ItemStack stack : items) {
+			for(ItemStack stack : items) {
 				packetBuffer.writeItem(stack);
 			}
 		}
 
 		@Override
 		public CauldronRecipe fromJson(ResourceLocation recipeId, JsonObject json) {
-			final Ingredient input = Ingredient.fromJson(json.get("input"));
-			final ItemStack[] outputs = json.has("result") ? readItemStacks(json.get("result"), true).toArray(new ItemStack[0]) : new ItemStack[0];
-			final ResourceLocation fluid = new ResourceLocation(JSONUtils.getAsString(json, "fluid", "bettercauldron:no_fluid"));
-			final int requiredLevel = JSONUtils.getAsInt(json, "requires_level", 1);
-			final int consumedLevel = JSONUtils.getAsInt(json, "consumes_level", requiredLevel);
+			Ingredient input = Ingredient.fromJson(json.get("input"));
+			ItemStack[] outputs = json.has("result") ? readItemStacks(json.get("result"), true).toArray(new ItemStack[0]) : new ItemStack[0];
+			ResourceLocation fluid = new ResourceLocation(JSONUtils.getAsString(json, "fluid", "bettercauldron:no_fluid"));
+			int requiredLevel = JSONUtils.getAsInt(json, "requires_level", 1);
+			int consumedLevel = JSONUtils.getAsInt(json, "consumes_level", requiredLevel);
 			return new CauldronRecipe(recipeId, input, outputs, fluid, requiredLevel, consumedLevel);
 		}
 
 		@Nullable
 		@Override
 		public CauldronRecipe fromNetwork(ResourceLocation recipeId, PacketBuffer packetBuffer) {
-			System.out.println("fromNetwork: " + recipeId.toString());
-			final Ingredient input = Ingredient.fromNetwork(packetBuffer);
-			final ItemStack[] outputs = readItemStackArray(packetBuffer);
-			final ResourceLocation fluid = packetBuffer.readResourceLocation();
-			final int requiredLevel = packetBuffer.readInt();
-			final int consumedLevel = packetBuffer.readInt();
+			Ingredient input = Ingredient.fromNetwork(packetBuffer);
+			ItemStack[] outputs = readItemStackArray(packetBuffer);
+			ResourceLocation fluid = packetBuffer.readResourceLocation();
+			int requiredLevel = packetBuffer.readInt();
+			int consumedLevel = packetBuffer.readInt();
 			return new CauldronRecipe(recipeId, input, outputs, fluid, requiredLevel, consumedLevel);
 		}
 
