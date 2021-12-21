@@ -5,6 +5,7 @@ import io.github.wouink.bettercauldron.block.Cauldron;
 import io.github.wouink.bettercauldron.block.tileentity.CauldronTileEntity;
 import io.github.wouink.bettercauldron.client.CauldronRenderer;
 import io.github.wouink.bettercauldron.event.CauldronPlaceEvent;
+import io.github.wouink.bettercauldron.event.UpdateVanillaCauldron;
 import io.github.wouink.bettercauldron.mixin.PointOfInterestTypeMixin;
 import io.github.wouink.bettercauldron.recipe.CauldronRecipe;
 import net.minecraft.block.Block;
@@ -51,6 +52,7 @@ public class BetterCauldron {
 
 	public void setup(final FMLCommonSetupEvent event) {
 		MinecraftForge.EVENT_BUS.register(new CauldronPlaceEvent());
+		MinecraftForge.EVENT_BUS.register(new UpdateVanillaCauldron());
 		LOGGER.info("Better Cauldron Setup.");
 	}
 

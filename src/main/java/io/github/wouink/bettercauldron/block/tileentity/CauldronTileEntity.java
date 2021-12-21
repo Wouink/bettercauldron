@@ -62,6 +62,11 @@ public class CauldronTileEntity extends TileEntity {
 		return fluid;
 	}
 
+	public void setFluid(Fluid f, int l) {
+		this.fluid = f;
+		this.fluidLevel = l;
+	}
+
 	private boolean incrementLevel() {
 		if(fluidLevel < 3) {
 			fluidLevel++;
