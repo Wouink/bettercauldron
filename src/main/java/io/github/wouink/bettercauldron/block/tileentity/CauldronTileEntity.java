@@ -21,6 +21,7 @@ import net.minecraft.stats.Stats;
 import net.minecraft.tileentity.BannerTileEntity;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.*;
+import net.minecraft.world.World;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import javax.annotation.Nullable;
@@ -67,133 +68,158 @@ public class CauldronTileEntity extends TileEntity {
 		this.fluidLevel = l;
 	}
 
-	private boolean incrementLevel() {
-		if(fluidLevel < 3) {
-			fluidLevel++;
-			return true;
-		}
-		return false;
-	}
-
-	private boolean decrementLevel() {
-		if(fluidLevel > 0) {
-			fluidLevel--;
-			if(fluidLevel == 0) fluid = Fluids.EMPTY;
-			return true;
-		}
-		return false;
-	}
-
-	private void updateFluid() {
-		if(fluidLevel <= 0) {
+	private void addLevel(int amount) {
+		fluidLevel += amount;
+		if(fluidLevel > 3) fluidLevel = 3;
+		else if(fluidLevel <= 0) {
 			fluidLevel = 0;
 			fluid = Fluids.EMPTY;
 		}
+	}
+
+	private static boolean isWatterBottle(ItemStack stack) {
+		return stack.getItem() == Items.POTION && PotionUtils.getPotion(stack) == Potions.WATER;
+	}
+
+	private static void updatePlayerInventory(PlayerEntity playerEntity) {
+		if(playerEntity instanceof ServerPlayerEntity) ((ServerPlayerEntity) playerEntity).refreshContainer(playerEntity.inventoryMenu);
 	}
 
 	// replicates and improves the vanilla cauldron behavior
 	public void handleUse(PlayerEntity playerEntity, Hand hand) {
 		ItemStack stack = playerEntity.getItemInHand(hand);
 		if(stack.getItem() instanceof BucketItem) {
+			// fill or empty from bucket
 			if(stack.getItem() == Items.BUCKET) {
 				if(fluid != Fluids.EMPTY && fluidLevel == 3) {
-					if(!playerEntity.abilities.instabuild) {
+					if(!level.isClientSide() && !playerEntity.abilities.instabuild) {
 						if (stack.getCount() > 1) {
 							playerEntity.addItem(new ItemStack(fluid.getBucket()));
 						} else {
 							playerEntity.setItemInHand(hand, new ItemStack(fluid.getBucket()));
 						}
+						playerEntity.awardStat(Stats.FILL_CAULDRON);
 					}
 					fluid = Fluids.EMPTY;
 					fluidLevel = 0;
 					level.playSound(playerEntity, worldPosition, fluid == Fluids.LAVA ? SoundEvents.BUCKET_FILL_LAVA : SoundEvents.BUCKET_FILL, SoundCategory.PLAYERS, 1.0f, 1.0f);
-					playerEntity.awardStat(Stats.FILL_CAULDRON);
 				}
 			} else {
 				if(isEmpty()) {
 					fluid = ((BucketItem) stack.getItem()).getFluid();
 					fluidLevel = 3;
-					if(!playerEntity.abilities.instabuild) playerEntity.setItemInHand(hand, new ItemStack(Items.BUCKET));
-					level.playSound(playerEntity, worldPosition, fluid == Fluids.LAVA ? SoundEvents.BUCKET_EMPTY_LAVA : SoundEvents.BUCKET_EMPTY, SoundCategory.PLAYERS, 1.0f, 1.0f);
-					playerEntity.awardStat(Stats.USE_CAULDRON);
-				}
-			}
-		} else if(stack.getItem() == Items.POTION) {
-			if(PotionUtils.getPotion(stack) == Potions.WATER && (fluid == Fluids.WATER || fluid == Fluids.EMPTY)) {
-				if(fluid == Fluids.EMPTY) fluid = Fluids.WATER;
-				if(incrementLevel()) {
-					if(!playerEntity.abilities.instabuild) {
-						if (stack.getCount() == 1) playerEntity.setItemInHand(hand, new ItemStack(Items.GLASS_BOTTLE));
-						else playerEntity.addItem(new ItemStack(Items.GLASS_BOTTLE));
+					if(!level.isClientSide() && !playerEntity.abilities.instabuild){
+						playerEntity.setItemInHand(hand, new ItemStack(Items.BUCKET));
+						playerEntity.awardStat(Stats.USE_CAULDRON);
 					}
-					level.playSound(playerEntity, worldPosition, SoundEvents.BOTTLE_EMPTY, SoundCategory.PLAYERS, 1.0f, 1.0f);
+					level.playSound(playerEntity, worldPosition, fluid == Fluids.LAVA ? SoundEvents.BUCKET_EMPTY_LAVA : SoundEvents.BUCKET_EMPTY, SoundCategory.PLAYERS, 1.0f, 1.0f);
+				}
+			}
+		} else if(isWatterBottle(stack) && (fluid == Fluids.WATER || fluid == Fluids.EMPTY)) {
+			// fill from watter bottle
+			if(fluid == Fluids.EMPTY) fluid = Fluids.WATER;
+			if(fluidLevel < 3) {
+				addLevel(1);
+				if(!level.isClientSide() && !playerEntity.abilities.instabuild) {
+					ItemStack glassBottle = new ItemStack(Items.GLASS_BOTTLE);
+					if (stack.getCount() == 1) playerEntity.setItemInHand(hand, glassBottle);
+					else if(!playerEntity.addItem(glassBottle)) playerEntity.drop(glassBottle, false);
+					else updatePlayerInventory(playerEntity);
 					playerEntity.awardStat(Stats.USE_CAULDRON);
 				}
+				level.playSound(playerEntity, worldPosition, SoundEvents.BOTTLE_EMPTY, SoundCategory.PLAYERS, 1.0f, 1.0f);
 			}
-		} else if(stack.getItem() == Items.GLASS_BOTTLE) {
-			if(fluid == Fluids.WATER && decrementLevel()) {
-				if(!playerEntity.abilities.instabuild) {
-					if (stack.getCount() == 1)
-						playerEntity.setItemInHand(hand, PotionUtils.setPotion(new ItemStack(Items.POTION), Potions.WATER));
-					else playerEntity.addItem(PotionUtils.setPotion(new ItemStack(Items.POTION), Potions.WATER));
-				}
-				level.playSound(playerEntity, worldPosition, SoundEvents.BOTTLE_FILL, SoundCategory.PLAYERS, 1.0f, 1.0f);
-				playerEntity.awardStat(Stats.USE_CAULDRON);
-			}
-		} else if(!handleHardcodedActions(stack, playerEntity, hand)) {
+		} else if(!handleHardcodedVanillaActions(stack, playerEntity, hand)) {
 			CauldronRecipe recipe = CauldronRecipe.findRecipe(stack, fluid.getRegistryName(), fluidLevel);
 			if(recipe != null) {
 				if(!playerEntity.abilities.instabuild) {
-					fluidLevel -= recipe.getConsumedLevel();
-					updateFluid();
+					addLevel(-recipe.getConsumedLevel());
 				}
-				if(!recipe.appliesToStack()) {
-					stack.setCount(stack.getCount() - 1);
-					playerEntity.setItemInHand(hand, stack);
-					for(ItemStack s : recipe.getResults()) {
-						s.setCount(1);
-						if(!playerEntity.addItem(s)) playerEntity.drop(s, false);
+				if(!level.isClientSide()) {
+					if (!recipe.appliesToStack()) {
+						ItemStack[] results = recipe.getResults();
+						for(ItemStack s : results) s.setCount(1);
+						stack.shrink(1);
+						if(stack.isEmpty()) playerEntity.setItemInHand(hand, results[0]);
+						else if(!playerEntity.addItem(results[0])) playerEntity.drop(results[0], false);
+						else updatePlayerInventory(playerEntity);
+
+						for(int i = 1; i < results.length; i++) {
+							if(!playerEntity.addItem(results[i])) playerEntity.drop(results[i], false);
+						}
+					} else {
+						ItemStack[] results = recipe.getResults();
+						for(ItemStack s : results) s.setCount(stack.getCount());
+						playerEntity.setItemInHand(hand, results[0]);
+						for(int i = 1; i < results.length; i++) {
+							if(!playerEntity.addItem(results[i])) playerEntity.drop(results[i], false);
+						}
 					}
-				} else {
-					for(ItemStack s : recipe.getResults()) s.setCount(stack.getCount());
-					playerEntity.setItemInHand(hand, recipe.getResults()[0]);
-					for(int i = 1; i < recipe.getResults().length; i++) {
-						if(!playerEntity.addItem(recipe.getResults()[i])) playerEntity.drop(recipe.getResults()[i], false);
-					}
+					playerEntity.awardStat(Stats.USE_CAULDRON);
 				}
-				if(playerEntity instanceof ServerPlayerEntity) ((ServerPlayerEntity) playerEntity).refreshContainer(playerEntity.inventoryMenu);
 			}
 		}
 	}
 
-	public boolean handleHardcodedActions(ItemStack stack, PlayerEntity playerEntity, Hand hand) {
-		if(stack.getItem() instanceof IDyeableArmorItem && fluid == Fluids.WATER && fluidLevel > 0) {
-			IDyeableArmorItem armorItem = (IDyeableArmorItem) stack.getItem();
-			if(armorItem.hasCustomColor(stack)) {
-				armorItem.clearColor(stack);
-				if(!playerEntity.abilities.instabuild) decrementLevel();
-				playerEntity.awardStat(Stats.CLEAN_ARMOR);
-				playerEntity.setItemInHand(hand, stack);
+	public boolean handleHardcodedVanillaActions(ItemStack stack, PlayerEntity playerEntity, Hand hand) {
+		if(fluid == Fluids.WATER && fluidLevel > 0) {
+			// vanilla actions only concern water
+			if(stack.getItem() == Items.GLASS_BOTTLE) {
+				// empty from bottle
+				addLevel(-1);
+				if(!level.isClientSide() && !playerEntity.abilities.instabuild) {
+					stack.shrink(1);
+					ItemStack waterBottle = PotionUtils.setPotion(new ItemStack(Items.POTION), Potions.WATER);
+					if(stack.isEmpty()) playerEntity.setItemInHand(hand, waterBottle);
+					else if(!playerEntity.addItem(waterBottle)) playerEntity.drop(waterBottle, false);
+					else updatePlayerInventory(playerEntity);
+					playerEntity.awardStat(Stats.USE_CAULDRON);
+				}
+				level.playSound(playerEntity, worldPosition, SoundEvents.BOTTLE_FILL, SoundCategory.PLAYERS, 1.0f, 1.0f);
+				return true;
+			} else if(stack.getItem() instanceof IDyeableArmorItem) {
+				// wash armor
+				IDyeableArmorItem armorItem = (IDyeableArmorItem) stack.getItem();
+				if(armorItem.hasCustomColor(stack)) {
+					if(!playerEntity.abilities.instabuild) addLevel(-1);
+					if(!level.isClientSide()) {
+						armorItem.clearColor(stack);
+						playerEntity.awardStat(Stats.CLEAN_ARMOR);
+					}
+				}
+				return true;
+			} else if(stack.getItem() instanceof BannerItem) {
+				// undo latest banner pattern
+				if(BannerTileEntity.getPatternCount(stack) > 0) {
+					if(!playerEntity.abilities.instabuild) addLevel(-1);
+					if(!level.isClientSide()) {
+						ItemStack newBanner = stack.copy();
+						stack.setCount(1);
+						BannerTileEntity.removeLastPattern(newBanner);
+						if(!playerEntity.abilities.instabuild) {
+							playerEntity.awardStat(Stats.CLEAN_BANNER);
+							stack.shrink(1);
+						}
+
+						if(stack.isEmpty()) playerEntity.setItemInHand(hand, newBanner);
+						else if(!playerEntity.addItem(newBanner)) playerEntity.drop(newBanner, false);
+						else updatePlayerInventory(playerEntity);
+					}
+				}
+				return true;
+			} else if(stack.getItem() instanceof BlockItem && ((BlockItem) stack.getItem()).getBlock() instanceof ShulkerBoxBlock && ((BlockItem) stack.getItem()).getBlock() != Blocks.SHULKER_BOX) {
+				// wash colored shulker box
+				if(!playerEntity.abilities.instabuild){
+					addLevel(-1);
+				}
+				if(!level.isClientSide()) {
+					ItemStack newShulkerBox = new ItemStack(Blocks.SHULKER_BOX);
+					if(stack.hasTag()) newShulkerBox.setTag(stack.getTag().copy());
+					playerEntity.setItemInHand(hand, newShulkerBox);
+					if(!playerEntity.abilities.instabuild) playerEntity.awardStat(Stats.CLEAN_SHULKER_BOX);
+				}
 				return true;
 			}
-		} else if(stack.getItem() instanceof BannerItem && fluid == Fluids.WATER && fluidLevel > 0) {
-			ItemStack newBanner = stack.copy();
-			BannerTileEntity.removeLastPattern(newBanner);
-			playerEntity.awardStat(Stats.CLEAN_BANNER);
-			if(!playerEntity.abilities.instabuild) {
-				stack.shrink(1);
-				decrementLevel();
-			}
-			if(stack.isEmpty()) playerEntity.setItemInHand(hand, newBanner);
-			else if(!playerEntity.addItem(newBanner)) playerEntity.drop(newBanner, false);
-			return true;
-		} else if(stack.getItem() instanceof BlockItem && ((BlockItem) stack.getItem()).getBlock() instanceof ShulkerBoxBlock && ((BlockItem) stack.getItem()).getBlock() != Blocks.SHULKER_BOX && fluid == Fluids.WATER && fluidLevel > 0) {
-			ItemStack newShulkerBox = new ItemStack(Blocks.SHULKER_BOX);
-			if(stack.hasTag()) newShulkerBox.setTag(stack.getTag().copy());
-			playerEntity.setItemInHand(hand, newShulkerBox);
-			if(!playerEntity.abilities.instabuild) decrementLevel();
-			playerEntity.awardStat(Stats.CLEAN_SHULKER_BOX);
-			return true;
 		}
 		return false;
 	}
@@ -210,10 +236,9 @@ public class CauldronTileEntity extends TileEntity {
 				if(!recipe.appliesToStack()) {
 					int quantityCrafted = Math.min(item.getItem().getCount(), Math.floorDiv(fluidLevel, recipe.getConsumedLevel()));
 					if (quantityCrafted > 0) {
-						fluidLevel -= quantityCrafted * recipe.getConsumedLevel();
-						updateFluid();
+						addLevel(-quantityCrafted * recipe.getConsumedLevel());
 						ItemStack itemStack = item.getItem();
-						itemStack.setCount(itemStack.getCount() - quantityCrafted);
+						itemStack.shrink(quantityCrafted);
 						item.setItem(itemStack);
 						for(ItemStack s : recipe.getResults()) {
 							s.setCount(quantityCrafted);
@@ -221,12 +246,12 @@ public class CauldronTileEntity extends TileEntity {
 						}
 					}
 				} else {
-					fluidLevel -= recipe.getConsumedLevel();
-					updateFluid();
+					addLevel(-recipe.getConsumedLevel());
 					int index = 0;
 					for(ItemStack s : recipe.getResults()) {
 						s.setCount(item.getItem().getCount());
-						if(index > 0) spawnItemInside(s);
+						if(index == 0) item.setItem(s);
+						else spawnItemInside(s);
 						index++;
 					}
 					item.setItem(recipe.getResults()[0]);
@@ -235,14 +260,14 @@ public class CauldronTileEntity extends TileEntity {
 		} else if(this.fluid == Fluids.WATER) {
 			if(entity.isOnFire() && !entity.fireImmune()) {
 				entity.clearFire();
-				this.fluidLevel--;
-				updateFluid();
+				addLevel(-1);
 			}
 		}
 	}
 
 	public void fillFromRain() {
-		if(fluid == Fluids.WATER) incrementLevel();
+		if(fluid == Fluids.EMPTY) fluid = Fluids.WATER;
+		if(fluid == Fluids.WATER) addLevel(1);
 	}
 
 	// sync between client/server

@@ -18,12 +18,10 @@ public class UpdateVanillaCauldron {
 		if(state.getBlock() == Blocks.CAULDRON) {
 			int level = state.getValue(CauldronBlock.LEVEL);
 			event.getWorld().setBlock(event.getPos(), BetterCauldron.Cauldron_Block.defaultBlockState(), 3);
-			System.out.println("Updated Block");
 			if(level > 0) {
 				TileEntity tileEntity = event.getWorld().getBlockEntity(event.getPos());
 				if(tileEntity instanceof CauldronTileEntity) {
 					((CauldronTileEntity) tileEntity).setFluid(Fluids.WATER, level);
-					System.out.println("Updated TileEntity");
 					((CauldronTileEntity) tileEntity).handleUse(event.getPlayer(), event.getHand());
 				}
 			}

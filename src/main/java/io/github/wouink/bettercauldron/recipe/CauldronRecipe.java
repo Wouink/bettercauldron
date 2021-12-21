@@ -27,17 +27,15 @@ public class CauldronRecipe implements IRecipe<IInventory> {
 	private final Ingredient ingredient;
 	private final ItemStack[] results;
 	private final ResourceLocation fluid;
-	private final int requiresLevel;
 	private final int consumesLevel;
 	private final boolean appliesToStack;
 	private final ResourceLocation recipeLoc;
 
-	public CauldronRecipe(ResourceLocation loc, Ingredient ingredient, ItemStack[] results, ResourceLocation fluid, int requiresLevel, int consumesLevel, boolean appliesToStack) {
+	public CauldronRecipe(ResourceLocation loc, Ingredient ingredient, ItemStack[] results, ResourceLocation fluid, int consumesLevel, boolean appliesToStack) {
 		this.recipeLoc = loc;
 		this.ingredient = ingredient;
 		this.results = results;
 		this.fluid = fluid;
-		this.requiresLevel = requiresLevel;
 		this.consumesLevel = consumesLevel;
 		this.appliesToStack = appliesToStack;
 	}
@@ -55,7 +53,7 @@ public class CauldronRecipe implements IRecipe<IInventory> {
 	}
 
 	public boolean matches(ItemStack stack, ResourceLocation fluid, int level) {
-		return this.ingredient.test(stack) && this.fluid.equals(fluid) && this.requiresLevel <= level;
+		return this.ingredient.test(stack) && this.fluid.equals(fluid) && this.consumesLevel <= level;
 	}
 
 	@Override
@@ -144,10 +142,9 @@ public class CauldronRecipe implements IRecipe<IInventory> {
 			Ingredient input = Ingredient.fromJson(json.get("input"));
 			ItemStack[] outputs = json.has("result") ? readItemStacks(json.get("result"), true).toArray(new ItemStack[0]) : new ItemStack[0];
 			ResourceLocation fluid = new ResourceLocation(JSONUtils.getAsString(json, "fluid", "bettercauldron:no_fluid"));
-			int requiredLevel = JSONUtils.getAsInt(json, "requires_level", 1);
-			int consumedLevel = JSONUtils.getAsInt(json, "consumes_level", requiredLevel);
+			int consumedLevel = JSONUtils.getAsInt(json, "consumes_level", 1);
 			boolean appliesToStack = JSONUtils.getAsBoolean(json, "applies_to_stack", true);
-			return new CauldronRecipe(recipeId, input, outputs, fluid, requiredLevel, consumedLevel, appliesToStack);
+			return new CauldronRecipe(recipeId, input, outputs, fluid, consumedLevel, appliesToStack);
 		}
 
 		@Nullable
@@ -156,10 +153,9 @@ public class CauldronRecipe implements IRecipe<IInventory> {
 			Ingredient input = Ingredient.fromNetwork(packetBuffer);
 			ItemStack[] outputs = readItemStackArray(packetBuffer);
 			ResourceLocation fluid = packetBuffer.readResourceLocation();
-			int requiredLevel = packetBuffer.readInt();
 			int consumedLevel = packetBuffer.readInt();
 			boolean appliesToStack = packetBuffer.readBoolean();
-			return new CauldronRecipe(recipeId, input, outputs, fluid, requiredLevel, consumedLevel, appliesToStack);
+			return new CauldronRecipe(recipeId, input, outputs, fluid, consumedLevel, appliesToStack);
 		}
 
 		@Override
@@ -167,7 +163,6 @@ public class CauldronRecipe implements IRecipe<IInventory> {
 			recipe.ingredient.toNetwork(packetBuffer);
 			writeItemStackArray(packetBuffer, recipe.results);
 			packetBuffer.writeResourceLocation(recipe.fluid);
-			packetBuffer.writeInt(recipe.requiresLevel);
 			packetBuffer.writeInt(recipe.consumesLevel);
 			packetBuffer.writeBoolean(recipe.appliesToStack);
 		}

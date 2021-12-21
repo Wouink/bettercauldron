@@ -5,6 +5,5 @@
   },
   "result": "minecraft:orange_concrete",
   "fluid": "minecraft:water",
-  "requires_level": 1,
   "consumes_level": 1
 }
