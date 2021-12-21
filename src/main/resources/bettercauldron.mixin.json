@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "package": "io.github.wouink.bettercauldron.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "mixins": [
+    "PointOfInterestTypeMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "refmap": "bettercauldron.mixin-refmap.json"
+}
